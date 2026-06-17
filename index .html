@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Apple Wallet</title>
+    <style>
+        :root {
+            --apple-bg: #000000;
+            --apple-card-bg: #1C1C1E;
+            --apple-blue: #0A84FF;
+            --text-main: #FFFFFF;
+            --text-muted: #8E8E93;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+
+        body { background-color: var(--apple-bg); color: var(--text-main); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+        /* ====== 認證 (登入/註冊) 畫面 ====== */
+        #auth-view { display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100%; padding: 40px; background: var(--apple-bg); }
+        .auth-logo { font-size: 40px; font-weight: 500; color: var(--text-main); margin-bottom: 40px; letter-spacing: -1px; }
+        .input-group { width: 100%; max-width: 320px; margin-bottom: 16px; }
+        .input-group input { width: 100%; background: var(--apple-card-bg); border: 1px solid #333; color: white; padding: 16px; border-radius: 12px; font-size: 16px; outline: none; }
+        .input-group input:focus { border-color: var(--apple-blue); }
+        .btn { width: 100%; max-width: 320px; padding: 16px; border-radius: 25px; font-size: 16px; font-weight: bold; cursor: pointer; border: none; margin-bottom: 12px; transition: 0.2s; }
+        .btn-primary { background: var(--text-main); color: #000; }
+        .btn-primary:active { transform: scale(0.96); }
+        .auth-toggle { font-size: 14px; color: var(--apple-blue); margin-top: 16px; cursor: pointer; }
+
+        /* ====== 錢包 (Apple Wallet) 畫面 ====== */
+        #wallet-view { display: none; flex-direction: column; height: 100%; padding: 20px; padding-top: 60px; }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 40px; }
+        .header h1 { font-size: 32px; font-weight: bold; }
+        .logout-btn { color: var(--apple-blue); background: none; border: none; font-size: 16px; cursor: pointer; font-weight: 500; }
+
+        /* 模擬 Apple Pay 數位卡片 */
+        .digital-card { background: linear-gradient(135deg, #2C2C2E 0%, #1A1A1C 100%); border-radius: 20px; padding: 24px; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.8); margin-bottom: 30px; position: relative; overflow: hidden; border: 1px solid #3A3A3C; transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        .digital-card:active { transform: scale(0.98); }
+        .card-brand { font-size: 24px; font-weight: 500; color: #FFF; margin-bottom: 30px; letter-spacing: -0.5px; }
+        .card-balance-label { font-size: 12px; color: var(--text-muted); text-transform: uppercase; font-weight: 600; }
+        .card-balance { font-size: 36px; font-weight: 400; margin-top: 4px; }
+        .card-user { position: absolute; bottom: 24px; right: 24px; font-size: 14px; color: var(--text-muted); font-family: monospace; }
+
+        /* QR Code 顯示區 */
+        .qr-section { background: var(--apple-card-bg); border-radius: 20px; padding: 24px; text-align: center; flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; }
+        .tabs { display: flex; background: #000; border-radius: 10px; padding: 4px; margin-bottom: 24px; width: 100%; }
+        .tab { flex: 1; text-align: center; padding: 10px; font-size: 14px; border-radius: 8px; cursor: pointer; font-weight: 600; color: var(--text-muted); }
+        .tab.active { background: #333; color: white; }
+        .qr-image-container { background: white; padding: 12px; border-radius: 16px; margin-bottom: 16px; }
+        .qr-image-container img { width: 180px; height: 180px; display: block; }
+        .timer { font-size: 14px; color: var(--apple-blue); font-weight: bold; background: rgba(10, 132, 255, 0.15); padding: 8px 16px; border-radius: 20px; }
+    </style>
+</head>
+<body>
+
+    <div id="auth-view">
+        <div class="auth-logo"> Pay</div>
+        <h2 id="auth-title" style="margin-bottom: 24px;">登入您的 Apple ID</h2>
+        
+        <div class="input-group">
+            <input type="tel" id="phone" placeholder="電話號碼 (作為帳戶)">
+        </div>
+        <div class="input-group">
+            <input type="password" id="password" placeholder="密碼">
+        </div>
+
+        <button class="btn btn-primary" id="auth-main-btn" onclick="handleAuth()">使用 Face ID 登入</button>
+        <div class="auth-toggle" id="auth-toggle" onclick="toggleAuthMode()">還沒有帳戶？點此建立</div>
+    </div>
+
+    <div id="wallet-view">
+        <div class="header">
+            <h1>Wallet</h1>
+            <button class="logout-btn" onclick="logout()">登出</button>
+        </div>
+
+        <div class="digital-card">
+            <div class="card-brand"> Apple Cash</div>
+            <div class="card-balance-label">Current Balance</div>
+            <div class="card-balance" id="display-balance">HK$ 0</div>
+            <div class="card-user" id="display-phone">0912***678</div>
+        </div>
+
+        <div class="qr-section">
+            <div class="tabs">
+                <div class="tab active" id="tab-pay" onclick="switchTab('pay')">支付條碼</div>
+                <div class="tab" id="tab-topup" onclick="switchTab('topup')">增值條碼</div>
+            </div>
+            <div class="qr-image-container">
+                <img id="qr-img" src="" alt="QR Code">
+            </div>
+            <div class="timer" id="timer-display">載入中...</div>
+        </div>
+    </div>
+
+    <script>
+        let isLoginMode = true;
+        let currentUser = null; 
+        let currentMode = 'pay';
+        let timeLeft = 600;
+        let timerInterval;
+
+        if (!localStorage.getItem('apple_db_users')) {
+            localStorage.setItem('apple_db_users', JSON.stringify({}));
+        }
+
+        function toggleAuthMode() {
+            isLoginMode = !isLoginMode;
+            document.getElementById('auth-title').innerText = isLoginMode ? '登入您的 Apple ID' : '建立新的 Apple ID';
+            document.getElementById('auth-main-btn').innerText = isLoginMode ? '使用 Face ID 登入' : '註冊並加入 Wallet';
+            document.getElementById('auth-toggle').innerText = isLoginMode ? '還沒有帳戶？點此建立' : '已有帳戶？返回登入';
+        }
+
+        function handleAuth() {
+            const phone = document.getElementById('phone').value.trim();
+            const pass = document.getElementById('password').value.trim();
+            if (!phone || !pass) return alert('請輸入完整資訊');
+
+            const usersDb = JSON.parse(localStorage.getItem('apple_db_users'));
+
+            if (isLoginMode) {
+                // 原型優化：如果登入時找不到帳號，自動當作新註冊，避免跨設備測試不方便
+                if (!usersDb[phone]) {
+                    usersDb[phone] = { password: pass, balance: 0 };
+                    localStorage.setItem('apple_db_users', JSON.stringify(usersDb));
+                } else if (usersDb[phone].password !== pass) {
+                    return alert('密碼錯誤！');
+                }
+                currentUser = phone;
+                loginSuccess();
+            } else {
+                if (usersDb[phone]) return alert('此電話號碼已註冊！');
+                usersDb[phone] = { password: pass, balance: 0 };
+                localStorage.setItem('apple_db_users', JSON.stringify(usersDb));
+                alert('Wallet 設置完成。');
+                currentUser = phone;
+                loginSuccess();
+            }
+        }
+
+        function loginSuccess() {
+            localStorage.setItem('apple_active_session', currentUser);
+            document.getElementById('auth-view').style.display = 'none';
+            document.getElementById('wallet-view').style.display = 'flex';
+            
+            const maskedPhone = currentUser.length > 4 ? currentUser.substring(0, 4) + '***' + currentUser.substring(currentUser.length - 3) : currentUser;
+            document.getElementById('display-phone').innerText = maskedPhone;
+            
+            updateBalanceUI();
+            refreshCodes();
+            startTimer();
+        }
+
+        function logout() {
+            localStorage.removeItem('apple_active_session');
+            clearInterval(timerInterval);
+            currentUser = null;
+            document.getElementById('auth-view').style.display = 'flex';
+            document.getElementById('wallet-view').style.display = 'none';
+            document.getElementById('phone').value = '';
+            document.getElementById('password').value = '';
+        }
+
+        function updateBalanceUI() {
+            if (!currentUser) return;
+            const usersDb = JSON.parse(localStorage.getItem('apple_db_users'));
+            const bal = usersDb[currentUser] ? usersDb[currentUser].balance : 0;
+            document.getElementById('display-balance').innerText = `HK$ ${bal.toLocaleString()}`;
+        }
+
+        function generateUUID() {
+            // 前綴改為 APPLE
+            return 'APPLE-' + currentUser + '-' + Math.random().toString(36).substring(2, 8).toUpperCase();
+        }
+
+        function refreshCodes() {
+            const payCode = generateUUID();
+            const topupCode = generateUUID();
+            localStorage.setItem('apple_current_pay_code', payCode);
+            localStorage.setItem('apple_current_topup_code', topupCode);
+            renderQR();
+            timeLeft = 600;
+        }
+
+        function renderQR() {
+            const code = currentMode === 'pay' ? localStorage.getItem('apple_current_pay_code') : localStorage.getItem('apple_current_topup_code');
+            document.getElementById('qr-img').src = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${code}`;
+        }
+
+        function switchTab(mode) {
+            currentMode = mode;
+            document.getElementById('tab-pay').className = `tab ${mode === 'pay' ? 'active' : ''}`;
+            document.getElementById('tab-topup').className = `tab ${mode === 'topup' ? 'active' : ''}`;
+            renderQR();
+        }
+
+        function startTimer() {
+            clearInterval(timerInterval);
+            timerInterval = setInterval(() => {
+                timeLeft--;
+                const m = Math.floor(timeLeft / 60).toString().padStart(2, '0');
+                const s = (timeLeft % 60).toString().padStart(2, '0');
+                document.getElementById('timer-display').innerText = `安全碼將於 ${m}:${s} 後更新`;
+                if (timeLeft <= 0) refreshCodes();
+            }, 1000);
+        }
+
+        // 監聽同一設備上的金額變動
+        window.addEventListener('storage', (e) => {
+            if (e.key === 'apple_db_users' && currentUser) {
+                updateBalanceUI();
+            }
+        });
+
+        window.onload = () => {
+            const session = localStorage.getItem('apple_active_session');
+            if (session) {
+                currentUser = session;
+                loginSuccess();
+            }
+        };
+    </script>
+</body>
+</html>
